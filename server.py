@@ -54,6 +54,11 @@ log = logging.getLogger('server')
 HEADER = '### Referenced Issues:'
 
 
+def get_gituser_from_redmine_login(login):
+    hits = [key for key in config.keys() if key.startswith('user.mapping.') and config[key] == login]
+    return hits[0][13:] if hits else None
+
+
 def create_tree_url(data, head_or_base='head'):
     ref = data['pull_request'][head_or_base]['ref']
     url = data['pull_request'][head_or_base]['repo']['html_url'] + "/tree/" + ref
@@ -138,22 +143,32 @@ def get_issues_from_pr(pullrequest):
     return sorted(set(map(int, re.findall(r'\bgs-(\d+)', ' '.join(text)))))
 
 
-def get_issue_titles(issues):
+def get_issue_information(issues):
     corgi = Corgi(config['redmine.url'], config['redmine.auth_key'])
-    titles = dict()
+    info = dict()
+    users = dict()
+    def get_user_login(user_id):
+        if not users.has_key(user_id):
+            users[user_id] = corgi.get_user(user_id).login
+        return users[user_id]
     if corgi.connected:
-        for issue in issues:
-            titles[issue] = corgi.get_issue_title(issue)
-    return titles
+        for issue_id in issues:
+            issue = corgi.get_issue(issue_id)
+            info[issue_id] = (issue.subject, [get_user_login(m.user.id) for m in issue.project.memberships if m.user])
+    return info
 
 
 def update_pr_description(pullrequest):
     log.info('Updating PR description for %s PR %s' % (pullrequest.base.repo.full_name, pullrequest.number))
     body = pullrequest.body
     issues = get_issues_from_pr(pullrequest)
-    titles = get_issue_titles(issues)
-    links = '\n'.join('* [Issue %s: %s](%sissues/%s)' % (issue, titles[issue], config['redmine.url'], issue)
+    info = get_issue_information(issues)
+    links = '\n'.join('* [Issue %s: %s](%sissues/%s)' % (issue, info[issue][0], config['redmine.url'], issue)
                       for issue in issues)
+    watchers = filter(None, (get_gituser_from_redmine_login(watcher)
+                      for watcher in reduce(lambda s, t: s.union(t), (info[issue][1] for issue in info.keys()), set())))
+    if watchers:
+        links += '\n* Watchers: ' + ' '.join('@' + watcher for watcher in watchers)
     lines = [line.strip() for line in body.split('\n')]
     if HEADER in lines:
         log.info('Found existing list of issues, updating')
@@ -175,6 +190,7 @@ def update_pr_description(pullrequest):
 
     if updated_body != body:
         log.info('Committing new body')
+        log.info(updated_body)
         if not config.get('dry-run'):
             pullrequest.edit(body=updated_body)
     else:

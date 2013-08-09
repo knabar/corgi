@@ -196,12 +196,20 @@ class Corgi(object):
         else:
             raise RedmineNotConnected()
 
-    def get_issue_title(self, issueId):
+    def get_issue(self, issueId):
         """
-        Retrieve the title for a given issue
+        Retrieve a given issue
         """
         if self.connected:
-            issue = self._redmine.issues[issueId]
-            return issue.subject
+            return self._redmine.issues[issueId]
+        else:
+            raise RedmineNotConnected()
+
+    def get_user(self, user_id):
+        """
+        Retrieve a given user
+        """
+        if self.connected:
+            return self._redmine.users[user_id]
         else:
             raise RedmineNotConnected()
