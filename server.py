@@ -69,6 +69,9 @@ def create_issue_update(pullrequest, data):
             return verb + 'd'
         return verb
 
+    def first_line(text):
+        return text.split('\n')[0] if text else ''
+
     loader = tornado.template.Loader(
         os.path.join(os.path.dirname(__file__), 'templates')
     )
@@ -78,6 +81,7 @@ def create_issue_update(pullrequest, data):
         head_url=create_tree_url(data, 'head'),
         base_url=create_tree_url(data, 'base'),
         make_past_tense=make_past_tense,
+        first_line=first_line,
         commits=get_commits_from_pr(pullrequest),
     )
 
